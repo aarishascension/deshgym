@@ -58,3 +58,35 @@ export const incrementViews = async (id: number) => {
   if (!supabase) return;
   try { await supabase.rpc("increment_views", { site_id: id }); } catch {}
 };
+
+// ── Subscriptions ─────────────────────────────────────────────────────────
+export const getSubscription = async () => {
+  if (!supabase) return null;
+  const { data } = await supabase.from("subscriptions").select("*").single();
+  return data;
+};
+
+export const createCheckout = async (plan: "pro" | "agency") => {
+  if (!supabase) return null;
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return null;
+  const { data, error } = await supabase.functions.invoke("razorpay-checkout", {
+    body: { user_id: user.id, plan },
+  });
+  if (error) throw error;
+  return data;
+};
+
+// ── Join leads ────────────────────────────────────────────────────────────
+export const submitJoinLead = async (lead: { site_id: number; name: string; phone: string; email: string; plan: string }) => {
+  if (!supabase) return;
+  await supabase.functions.invoke("send-join-email", { body: lead });
+};
+
+// ── Subdomain ─────────────────────────────────────────────────────────────
+export const setSubdomain = async (site_id: number, subdomain: string) => {
+  if (!supabase) return null;
+  const { data, error } = await supabase.from("sites").update({ subdomain }).eq("id", site_id).select().single();
+  if (error) throw error;
+  return data;
+};

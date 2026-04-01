@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { supabase } from "./lib/supabase";
-import { saveSite, loadSites, deleteSite, publishSite, signIn, signUp, signOut, onAuthChange } from "./lib/db";
+import { saveSite, loadSites, deleteSite, publishSite, signIn, signUp, signOut, onAuthChange, createCheckout, setSubdomain } from "./lib/db";
 
 const FONTS = `@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Barlow:wght@300;400;500;600;700&family=Barlow+Condensed:wght@400;600;700&display=swap');`;
 
@@ -248,6 +248,37 @@ export default function App() {
     setAuthModal(false); setAuthEmail(""); setAuthPass("");
   };
 
+  // ── Subscription ──────────────────────────────────────────────────────
+  const [subscription, setSubscription] = useState<{ plan: string; status: string; current_period_end: string } | null>(null);
+  const [subModal, setSubModal] = useState(false);
+
+  useEffect(() => {
+    if (!user || !supabase) return;
+    supabase.from("subscriptions").select("*").eq("user_id", user.id).single()
+      .then(({ data }) => { if (data) setSubscription(data as { plan: string; status: string; current_period_end: string }); });
+  }, [user]);
+
+  const handleUpgrade = async (plan: "pro" | "agency") => {
+    try {
+      const order = await createCheckout(plan);
+      if (!order) return;
+      // Load Razorpay script dynamically
+      const script = document.createElement("script");
+      script.src = "https://checkout.razorpay.com/v1/checkout.js";
+      document.body.appendChild(script);
+      script.onload = () => {
+        const rzp = new (window as unknown as { Razorpay: new (opts: object) => { open: () => void } }).Razorpay({
+          key: order.key, amount: order.amount, currency: order.currency,
+          name: "DeshGym", description: order.plan_name,
+          order_id: order.order_id,
+          handler: () => { setSubscription({ plan, status: "active", current_period_end: new Date(Date.now() + 30*24*60*60*1000).toISOString() }); setSubModal(false); alert("🎉 Welcome to " + order.plan_name + "!"); },
+          theme: { color: "#e8ff00" },
+        });
+        rzp.open();
+      };
+    } catch (e) { console.error(e); }
+  };
+
   const th = THEMES.find(t => t.id === selTheme)!;
   const uf = (k: keyof GymForm, v: string) => setForm(f => ({ ...f, [k]: v }));
   const ta = (a: string) => setSelAmns(p => p.includes(a) ? p.filter(x => x !== a) : [...p, a]);
@@ -349,7 +380,12 @@ export default function App() {
       const pricingSection = `<section id="pricing" style="padding:80px 2rem;background:${th.bg};"><div style="max-width:900px;margin:0 auto;text-align:center;"><p style="font-family:'Barlow Condensed',sans-serif;font-size:.75rem;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:${th.accent};margin-bottom:10px;">Membership</p><h2 style="font-family:'Bebas Neue',sans-serif;font-size:clamp(2.5rem,5vw,4rem);letter-spacing:2px;color:#f0f0f0;margin-bottom:50px;">CHOOSE YOUR PLAN</h2><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;text-align:left;">${cPlans.map((p, i) => `<div style="background:${i===1?"rgba(232,255,0,.05)":"#161616"};border:${i===1?`2px solid ${th.accent}`:"1px solid #222"};border-radius:12px;padding:28px 22px;position:relative;">${i===1?`<div style="position:absolute;top:-12px;left:50%;transform:translateX(-50%);background:${th.accent};color:#000;font-family:'Barlow Condensed',sans-serif;font-size:.65rem;font-weight:700;letter-spacing:1.5px;padding:3px 14px;border-radius:20px;">POPULAR</div>`:""}<div style="font-family:'Barlow Condensed',sans-serif;font-size:.75rem;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:${i===1?th.accent:"#555"};margin-bottom:12px;">${p.name}</div><div style="font-family:'Bebas Neue',sans-serif;font-size:2.8rem;letter-spacing:1px;color:#f0f0f0;line-height:1;">₹${p.price||"—"}</div><div style="font-size:.72rem;color:#555;margin-bottom:20px;">/${p.name.toLowerCase()}</div><div style="margin-bottom:22px;">${p.features.split(",").map((f: string)=>`<div style="font-size:.78rem;color:#aaa;padding:5px 0;border-bottom:1px solid #1a1a1a;display:flex;gap:8px;"><span style="color:${th.accent};">✓</span>${f.trim()}</div>`).join("")}</div><button onclick="document.getElementById('join').scrollIntoView({behavior:'smooth'})" style="width:100%;padding:12px;border-radius:7px;cursor:pointer;font-family:'Barlow Condensed',sans-serif;font-size:.85rem;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;background:${i===1?th.accent:"transparent"};color:${i===1?"#000":th.accent};border:${i===1?"none":`1.5px solid ${th.accent}`};">GET STARTED</button></div>`).join("")}</div></div></section>`;
 
       const ownerPhone = (form.phone || "").replace(/[^0-9]/g, "").replace(/^0/, "91");
-      const joinSection = `<section id="join" style="padding:80px 2rem;background:#0d0d0d;"><div style="max-width:560px;margin:0 auto;"><p style="font-family:'Barlow Condensed',sans-serif;font-size:.75rem;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:${th.accent};margin-bottom:10px;text-align:center;">Enroll Today</p><h2 style="font-family:'Bebas Neue',sans-serif;font-size:clamp(2.5rem,5vw,4rem);letter-spacing:2px;color:#f0f0f0;margin-bottom:16px;text-align:center;">JOIN NOW</h2><p style="text-align:center;font-size:.8rem;color:#555;margin-bottom:30px;">No joining fee · Cancel anytime · WhatsApp confirmation</p><div id="plan-tabs" style="display:grid;grid-template-columns:repeat(${cPlans.length},1fr);gap:8px;margin-bottom:24px;">${cPlans.map((p,i)=>`<div onclick="document.querySelectorAll('.jpt').forEach(x=>x.style.borderColor='#222');this.style.borderColor='${th.accent}';document.getElementById('plan-sel').value='${p.name}${p.price?` — ₹${p.price}`:''}'" class="jpt" style="padding:12px 8px;border-radius:8px;cursor:pointer;text-align:center;border:${i===1?`2px solid ${th.accent}`:'1px solid #222'};background:${i===1?`rgba(232,255,0,.05)`:'#161616'};transition:border-color .15s;"><div style="font-family:'Barlow Condensed',sans-serif;font-size:.7rem;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:${i===1?th.accent:'#555'};margin-bottom:4px;">${p.name}</div><div style="font-family:'Bebas Neue',sans-serif;font-size:1.3rem;letter-spacing:1px;color:#f0f0f0;">₹${p.price||'—'}</div></div>`).join('')}</div><form id="join-form" onsubmit="event.preventDefault();var f=this;var name=f.name.value;var phone=f.phone.value;var email=f.email.value;var plan=document.getElementById('plan-sel').value;var msg=encodeURIComponent('🏋️ New Member Request!\\n\\nGym: ${form.name}\\nName: '+name+'\\nPhone: '+phone+'\\nEmail: '+(email||'—')+'\\nPlan: '+plan+'\\n\\nPlease confirm membership.');${ownerPhone ? `window.open('https://wa.me/${ownerPhone}?text='+msg,'_blank');` : ""}f.style.display='none';document.getElementById('join-success').style.display='flex';" style="display:flex;flex-direction:column;gap:12px;"><input name="name" required placeholder="Full Name *" style="padding:13px 16px;background:#161616;border:1px solid #222;border-radius:8px;color:#f0f0f0;font-family:'Barlow',sans-serif;font-size:.9rem;outline:none;" onfocus="this.style.borderColor='${th.accent}'" onblur="this.style.borderColor='#222'"/><input name="phone" required placeholder="WhatsApp / Phone *" style="padding:13px 16px;background:#161616;border:1px solid #222;border-radius:8px;color:#f0f0f0;font-family:'Barlow',sans-serif;font-size:.9rem;outline:none;" onfocus="this.style.borderColor='${th.accent}'" onblur="this.style.borderColor='#222'"/><input name="email" type="email" placeholder="Email Address" style="padding:13px 16px;background:#161616;border:1px solid #222;border-radius:8px;color:#f0f0f0;font-family:'Barlow',sans-serif;font-size:.9rem;outline:none;" onfocus="this.style.borderColor='${th.accent}'" onblur="this.style.borderColor='#222'"/><input id="plan-sel" name="plan" readonly placeholder="Select a plan above" value="${cPlans[0]?.name||''}" style="padding:13px 16px;background:#161616;border:1px solid #222;border-radius:8px;color:#f0f0f0;font-family:'Barlow',sans-serif;font-size:.9rem;outline:none;cursor:pointer;"/><input name="date" type="date" style="padding:13px 16px;background:#161616;border:1px solid #222;border-radius:8px;color:#f0f0f0;font-family:'Barlow',sans-serif;font-size:.9rem;outline:none;" onfocus="this.style.borderColor='${th.accent}'" onblur="this.style.borderColor='#222'"/><button type="submit" style="padding:16px;border-radius:8px;cursor:pointer;font-family:'Bebas Neue',sans-serif;font-size:1.3rem;letter-spacing:2px;background:${th.accent};color:#000;border:none;margin-top:6px;">CONFIRM MEMBERSHIP</button></form><div id="join-success" style="display:none;flex-direction:column;align-items:center;text-align:center;padding:40px 20px;"><div style="width:72px;height:72px;border-radius:50%;background:rgba(232,255,0,.12);border:2px solid ${th.accent};display:flex;align-items:center;justify-content:center;font-size:2rem;margin-bottom:20px;">✓</div><div style="font-family:'Bebas Neue',sans-serif;font-size:2.5rem;letter-spacing:2px;color:${th.accent};margin-bottom:8px;">YOU'RE IN!</div><div style="font-size:.9rem;color:#888;line-height:1.6;">Welcome to <strong style="color:#f0f0f0;">${form.name}</strong>.<br/>We'll WhatsApp you within 2 hours.</div></div></div></section>`;
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || "";
+      const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
+      const siteIdForLead = sites.find(s => s.name === form.name)?.id || Date.now();
+      const leadApiCall = supabaseUrl ? `fetch('${supabaseUrl}/functions/v1/send-join-email',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer ${supabaseKey}'},body:JSON.stringify({site_id:${siteIdForLead},name:name,phone:phone,email:email,plan:plan})}).catch(()=>{});` : "";
+
+      const joinSection = `<section id="join" style="padding:80px 2rem;background:#0d0d0d;"><div style="max-width:560px;margin:0 auto;"><p style="font-family:'Barlow Condensed',sans-serif;font-size:.75rem;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:${th.accent};margin-bottom:10px;text-align:center;">Enroll Today</p><h2 style="font-family:'Bebas Neue',sans-serif;font-size:clamp(2.5rem,5vw,4rem);letter-spacing:2px;color:#f0f0f0;margin-bottom:16px;text-align:center;">JOIN NOW</h2><p style="text-align:center;font-size:.8rem;color:#555;margin-bottom:30px;">No joining fee · Cancel anytime · WhatsApp confirmation</p><div id="plan-tabs" style="display:grid;grid-template-columns:repeat(${cPlans.length},1fr);gap:8px;margin-bottom:24px;">${cPlans.map((p,i)=>`<div onclick="document.querySelectorAll('.jpt').forEach(x=>x.style.borderColor='#222');this.style.borderColor='${th.accent}';document.getElementById('plan-sel').value='${p.name}${p.price?` — ₹${p.price}`:''}'" class="jpt" style="padding:12px 8px;border-radius:8px;cursor:pointer;text-align:center;border:${i===1?`2px solid ${th.accent}`:'1px solid #222'};background:${i===1?`rgba(232,255,0,.05)`:'#161616'};transition:border-color .15s;"><div style="font-family:'Barlow Condensed',sans-serif;font-size:.7rem;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:${i===1?th.accent:'#555'};margin-bottom:4px;">${p.name}</div><div style="font-family:'Bebas Neue',sans-serif;font-size:1.3rem;letter-spacing:1px;color:#f0f0f0;">₹${p.price||'—'}</div></div>`).join('')}</div><form id="join-form" onsubmit="event.preventDefault();var f=this;var name=f.name.value;var phone=f.phone.value;var email=f.email.value;var plan=document.getElementById('plan-sel').value;var msg=encodeURIComponent('🏋️ New Member Request!\\n\\nGym: ${form.name}\\nName: '+name+'\\nPhone: '+phone+'\\nEmail: '+(email||'—')+'\\nPlan: '+plan+'\\n\\nPlease confirm membership.');${ownerPhone ? `window.open('https://wa.me/${ownerPhone}?text='+msg,'_blank');` : ""}${leadApiCall}f.style.display='none';document.getElementById('join-success').style.display='flex';" style="display:flex;flex-direction:column;gap:12px;"><input name="name" required placeholder="Full Name *" style="padding:13px 16px;background:#161616;border:1px solid #222;border-radius:8px;color:#f0f0f0;font-family:'Barlow',sans-serif;font-size:.9rem;outline:none;" onfocus="this.style.borderColor='${th.accent}'" onblur="this.style.borderColor='#222'"/><input name="phone" required placeholder="WhatsApp / Phone *" style="padding:13px 16px;background:#161616;border:1px solid #222;border-radius:8px;color:#f0f0f0;font-family:'Barlow',sans-serif;font-size:.9rem;outline:none;" onfocus="this.style.borderColor='${th.accent}'" onblur="this.style.borderColor='#222'"/><input name="email" type="email" placeholder="Email Address" style="padding:13px 16px;background:#161616;border:1px solid #222;border-radius:8px;color:#f0f0f0;font-family:'Barlow',sans-serif;font-size:.9rem;outline:none;" onfocus="this.style.borderColor='${th.accent}'" onblur="this.style.borderColor='#222'"/><input id="plan-sel" name="plan" readonly placeholder="Select a plan above" value="${cPlans[0]?.name||''}" style="padding:13px 16px;background:#161616;border:1px solid #222;border-radius:8px;color:#f0f0f0;font-family:'Barlow',sans-serif;font-size:.9rem;outline:none;cursor:pointer;"/><input name="date" type="date" style="padding:13px 16px;background:#161616;border:1px solid #222;border-radius:8px;color:#f0f0f0;font-family:'Barlow',sans-serif;font-size:.9rem;outline:none;" onfocus="this.style.borderColor='${th.accent}'" onblur="this.style.borderColor='#222'"/><button type="submit" style="padding:16px;border-radius:8px;cursor:pointer;font-family:'Bebas Neue',sans-serif;font-size:1.3rem;letter-spacing:2px;background:${th.accent};color:#000;border:none;margin-top:6px;">CONFIRM MEMBERSHIP</button></form><div id="join-success" style="display:none;flex-direction:column;align-items:center;text-align:center;padding:40px 20px;"><div style="width:72px;height:72px;border-radius:50%;background:rgba(232,255,0,.12);border:2px solid ${th.accent};display:flex;align-items:center;justify-content:center;font-size:2rem;margin-bottom:20px;">✓</div><div style="font-family:'Bebas Neue',sans-serif;font-size:2.5rem;letter-spacing:2px;color:${th.accent};margin-bottom:8px;">YOU'RE IN!</div><div style="font-size:.9rem;color:#888;line-height:1.6;">Welcome to <strong style="color:#f0f0f0;">${form.name}</strong>.<br/>We'll WhatsApp you within 2 hours.</div></div></div></section>`;
 
       // Reviews
       const reviewsData = cReviews.length > 0 ? cReviews : [];
@@ -588,7 +624,8 @@ ${waFloat}
           <button className="nav-cta" onClick={() => setTab("create")}>+ List Your Gym</button>
           {supabase && (
             user
-              ? <button className="nav-cta" style={{ background: "none", border: "1px solid var(--border)", color: "var(--muted)" }} onClick={() => signOut()?.then(() => setUser(null))}>👤 {user.email?.split("@")[0]} · Sign Out</button>
+              ? <><button className="nav-cta" style={{ background: subscription?.plan === "pro" || subscription?.plan === "agency" ? "var(--accent2)" : "none", border: "1px solid var(--border)", color: subscription?.plan === "pro" || subscription?.plan === "agency" ? "#fff" : "var(--muted)" }} onClick={() => setSubModal(true)}>{subscription?.plan === "pro" ? "⚡ Pro" : subscription?.plan === "agency" ? "🏢 Agency" : "⬆ Upgrade"}</button>
+              <button className="nav-cta" style={{ background: "none", border: "1px solid var(--border)", color: "var(--muted)" }} onClick={() => signOut()?.then(() => setUser(null))}>👤 {user.email?.split("@")[0]} · Sign Out</button></>
               : <button className="nav-cta" style={{ background: "none", border: "1px solid var(--border)", color: "var(--muted)" }} onClick={() => setAuthModal(true)}>🔐 Sign In</button>
           )}
           <button className="hamburger" onClick={() => setMobileMenu(m => !m)}>
@@ -1186,6 +1223,16 @@ ${waFloat}
                           <span>🕐 {site.createdAt}</span>
                         </div>
                         <div className="wcurl">{site.url}</div>
+                        <div style={{ display: "flex", gap: "6px", marginBottom: "8px", alignItems: "center" }}>
+                          <input className="sinput" style={{ flex: 1, padding: "6px 10px", fontSize: ".72rem" }}
+                            placeholder="subdomain (e.g. irondistrict)"
+                            defaultValue={(site as Site & { subdomain?: string }).subdomain || ""}
+                            onBlur={async e => {
+                              const val = e.target.value.trim().toLowerCase().replace(/[^a-z0-9-]/g, "");
+                              if (val && user) { await setSubdomain(site.id, val); }
+                            }} />
+                          <span style={{ fontSize: ".7rem", color: "var(--muted)", whiteSpace: "nowrap" }}>.deshgym.in</span>
+                        </div>
                         <div className="wcacts">
                           <button className="wbtn p" onClick={() => openViewer(site)}>🌐 View</button>
                           <button className="wbtn" onClick={() => { setSharing(site); setCopied(false); }}>📤 Share</button>
@@ -1846,6 +1893,40 @@ ${waFloat}
                 </div>
               </div>
               <button className="sharecls" onClick={() => setSharing(null)}>Close</button>
+            </div>
+          </div>
+        )}
+
+        {/* ── SUBSCRIPTION MODAL ── */}
+        {subModal && (
+          <div className="overlay" onClick={() => setSubModal(false)}>
+            <div className="modal" style={{ maxWidth: 600 }} onClick={e => e.stopPropagation()}>
+              <div className="mbody">
+                <div className="mname" style={{ fontSize: "2rem", marginBottom: "4px" }}>UPGRADE PLAN</div>
+                <div className="mtype" style={{ marginBottom: "24px" }}>Current: {subscription?.plan || "Free"}</div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "14px" }}>
+                  {[
+                    { plan: "free", name: "Free", price: "₹0", period: "forever", features: ["3 websites", "AI generation", "All sections", "Download HTML"], color: "var(--border)" },
+                    { plan: "pro", name: "Pro", price: "₹499", period: "/month", features: ["Unlimited websites", "Custom subdomain", "Email notifications", "Priority support", "Remove branding"], color: "var(--accent)" },
+                    { plan: "agency", name: "Agency", price: "₹1999", period: "/month", features: ["Everything in Pro", "White label", "Client management", "API access", "Dedicated support"], color: "var(--accent2)" },
+                  ].map((p, i) => (
+                    <div key={p.plan} style={{ background: i === 1 ? "rgba(232,255,0,.05)" : "var(--surface)", border: `2px solid ${subscription?.plan === p.plan ? p.color : "var(--border)"}`, borderRadius: "12px", padding: "20px", position: "relative" }}>
+                      {i === 1 && <div style={{ position: "absolute", top: "-11px", left: "50%", transform: "translateX(-50%)", background: "var(--accent)", color: "#000", fontFamily: "var(--fc)", fontSize: ".62rem", fontWeight: 700, letterSpacing: "1.5px", padding: "2px 12px", borderRadius: "20px" }}>POPULAR</div>}
+                      <div style={{ fontFamily: "var(--fc)", fontSize: ".72rem", fontWeight: 700, letterSpacing: "2px", textTransform: "uppercase", color: p.color, marginBottom: "8px" }}>{p.name}</div>
+                      <div style={{ fontFamily: "var(--fd)", fontSize: "2rem", letterSpacing: "1px", color: "var(--text)", lineHeight: 1 }}>{p.price}</div>
+                      <div style={{ fontSize: ".72rem", color: "var(--muted)", marginBottom: "16px" }}>{p.period}</div>
+                      {p.features.map(f => <div key={f} style={{ fontSize: ".75rem", color: "#aaa", padding: "4px 0", borderBottom: "1px solid #1a1a1a", display: "flex", gap: "6px" }}><span style={{ color: p.color }}>✓</span>{f}</div>)}
+                      {p.plan !== "free" && subscription?.plan !== p.plan && (
+                        <button style={{ width: "100%", marginTop: "16px", padding: "10px", borderRadius: "7px", cursor: "pointer", fontFamily: "var(--fc)", fontSize: ".8rem", fontWeight: 700, letterSpacing: "1.5px", textTransform: "uppercase", background: p.color, color: i === 1 ? "#000" : "#fff", border: "none" }}
+                          onClick={() => handleUpgrade(p.plan as "pro" | "agency")}>
+                          Pay with Razorpay
+                        </button>
+                      )}
+                      {subscription?.plan === p.plan && <div style={{ marginTop: "16px", textAlign: "center", fontFamily: "var(--fc)", fontSize: ".72rem", fontWeight: 700, letterSpacing: "1px", color: p.color }}>✓ Current Plan</div>}
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
         )}
