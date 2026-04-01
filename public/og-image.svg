@@ -1,0 +1,27 @@
+<svg width="1200" height="630" viewBox="0 0 1200 630" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0a0a0a"/>
+      <stop offset="100%" style="stop-color:#111"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <!-- Accent glow -->
+  <ellipse cx="600" cy="0" rx="500" ry="200" fill="rgba(232,255,0,0.06)"/>
+  <!-- Big background text -->
+  <text x="600" y="480" font-family="Arial Black, sans-serif" font-size="320" font-weight="900" fill="rgba(232,255,0,0.03)" text-anchor="middle" letter-spacing="20">GYMS</text>
+  <!-- Logo -->
+  <text x="100" y="120" font-family="Arial Black, sans-serif" font-size="72" font-weight="900" fill="#e8ff00" letter-spacing="6">DESH</text>
+  <text x="340" y="120" font-family="Arial Black, sans-serif" font-size="72" font-weight="900" fill="#f0f0f0" letter-spacing="6">GYM</text>
+  <!-- Tagline -->
+  <text x="100" y="170" font-family="Arial, sans-serif" font-size="22" fill="#555" letter-spacing="4">INDIA'S GYM DISCOVERY &amp; WEBSITE BUILDER</text>
+  <!-- Main headline -->
+  <text x="100" y="300" font-family="Arial Black, sans-serif" font-size="96" font-weight="900" fill="#f0f0f0" letter-spacing="4">BUILD YOUR</text>
+  <text x="100" y="410" font-family="Arial Black, sans-serif" font-size="96" font-weight="900" fill="#e8ff00" letter-spacing="4">GYM WEBSITE</text>
+  <!-- Sub -->
+  <text x="100" y="480" font-family="Arial, sans-serif" font-size="28" fill="#555">AI-powered · Free to start · No coding needed</text>
+  <!-- URL -->
+  <text x="100" y="570" font-family="Arial, sans-serif" font-size="22" fill="#333">deshgym-ai.vercel.app</text>
+  <!-- Accent bar -->
+  <rect x="100" y="590" width="120" height="4" fill="#e8ff00" rx="2"/>
+</svg>
