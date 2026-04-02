@@ -90,3 +90,34 @@ export const setSubdomain = async (site_id: number, subdomain: string) => {
   if (error) throw error;
   return data;
 };
+
+// ── Referrals ─────────────────────────────────────────────────────────────
+export const generateReferralCode = (userId: string) =>
+  `DG${userId.slice(0, 6).toUpperCase()}${Math.random().toString(36).slice(2, 5).toUpperCase()}`;
+
+export const createReferral = async (code: string) => {
+  if (!supabase) return null;
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return null;
+  const { data, error } = await supabase.from("referrals").upsert({ referrer_id: user.id, code }, { onConflict: "code" }).select().single();
+  if (error) console.error("createReferral:", error);
+  return data;
+};
+
+export const applyReferral = async (code: string) => {
+  if (!supabase) return null;
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return null;
+  const { data: ref } = await supabase.from("referrals").select("*").eq("code", code).single();
+  if (!ref || ref.referred_id) return { error: "Invalid or already used code" };
+  await supabase.from("referrals").update({ referred_id: user.id, status: "completed" }).eq("code", code);
+  // Give referrer 1 free month
+  await supabase.from("subscriptions").upsert({ user_id: ref.referrer_id, plan: "pro", status: "active", free_months_remaining: 1, current_period_end: new Date(Date.now() + 30*24*60*60*1000).toISOString() }, { onConflict: "user_id" });
+  return { success: true };
+};
+
+export const getReferrals = async () => {
+  if (!supabase) return [];
+  const { data } = await supabase.from("referrals").select("*").order("created_at", { ascending: false });
+  return data || [];
+};

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { supabase } from "./lib/supabase";
-import { saveSite, loadSites, deleteSite, publishSite, signIn, signUp, signOut, onAuthChange, createCheckout, setSubdomain } from "./lib/db";
+import { saveSite, loadSites, deleteSite, publishSite, signIn, signUp, signOut, onAuthChange, createCheckout, setSubdomain, createReferral, applyReferral, getReferrals, generateReferralCode } from "./lib/db";
 
 const FONTS = `@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Barlow:wght@300;400;500;600;700&family=Barlow+Condensed:wght@400;600;700&display=swap');`;
 
@@ -251,11 +251,19 @@ export default function App() {
   // ── Subscription ──────────────────────────────────────────────────────
   const [subscription, setSubscription] = useState<{ plan: string; status: string; current_period_end: string } | null>(null);
   const [subModal, setSubModal] = useState(false);
+  const [referralCode, setReferralCode] = useState("");
+  const [referrals, setReferrals] = useState<{ id: string; code: string; status: string; created_at: string }[]>([]);
+  const [applyCode, setApplyCode] = useState("");
+  const [applyMsg, setApplyMsg] = useState("");
 
   useEffect(() => {
     if (!user || !supabase) return;
     supabase.from("subscriptions").select("*").eq("user_id", user.id).single()
       .then(({ data }) => { if (data) setSubscription(data as { plan: string; status: string; current_period_end: string }); });
+    const code = generateReferralCode(user.id);
+    setReferralCode(code);
+    createReferral(code);
+    getReferrals().then(r => setReferrals(r as { id: string; code: string; status: string; created_at: string }[]));
   }, [user]);
 
   const handleUpgrade = async (plan: "pro" | "agency") => {
@@ -1349,6 +1357,59 @@ ${waFloat}
                 </div>
               </div>
             )}
+
+            {/* Referral System */}
+            <div style={{ marginTop: "32px" }}>
+              <div style={{ fontFamily: "var(--fc)", fontSize: ".68rem", fontWeight: 700, letterSpacing: "2px", textTransform: "uppercase", color: "var(--accent)", marginBottom: "14px" }}>🎁 Referral Program</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
+                {/* Your referral link */}
+                <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: "10px", padding: "20px" }}>
+                  <div style={{ fontFamily: "var(--fc)", fontSize: ".75rem", fontWeight: 700, letterSpacing: "1px", textTransform: "uppercase", color: "var(--text)", marginBottom: "8px" }}>Your Referral Code</div>
+                  <div style={{ fontFamily: "var(--fd)", fontSize: "1.8rem", letterSpacing: "3px", color: "var(--accent)", marginBottom: "8px" }}>{referralCode}</div>
+                  <div style={{ fontSize: ".78rem", color: "var(--muted)", marginBottom: "14px" }}>Share this code. When someone signs up and uses it, you get 1 free Pro month.</div>
+                  <div style={{ display: "flex", gap: "8px" }}>
+                    <button style={{ flex: 1, padding: "9px", fontFamily: "var(--fc)", fontSize: ".72rem", fontWeight: 700, letterSpacing: "1px", textTransform: "uppercase", background: "var(--accent)", color: "#000", border: "none", borderRadius: "6px", cursor: "pointer" }}
+                      onClick={() => { navigator.clipboard.writeText(`Join DeshGym with my code ${referralCode} and get started free! https://deshgym-ai.vercel.app`); }}>
+                      📋 Copy Link
+                    </button>
+                    <button style={{ padding: "9px 14px", fontFamily: "var(--fc)", fontSize: ".72rem", fontWeight: 700, letterSpacing: "1px", textTransform: "uppercase", background: "#25d366", color: "#fff", border: "none", borderRadius: "6px", cursor: "pointer" }}
+                      onClick={() => window.open(`https://wa.me/?text=${encodeURIComponent(`Join DeshGym with my code ${referralCode} and build your gym website free! https://deshgym-ai.vercel.app`)}`, "_blank")}>
+                      💬 WhatsApp
+                    </button>
+                  </div>
+                  {referrals.length > 0 && (
+                    <div style={{ marginTop: "14px", borderTop: "1px solid var(--border)", paddingTop: "12px" }}>
+                      <div style={{ fontFamily: "var(--fc)", fontSize: ".65rem", fontWeight: 700, letterSpacing: "1px", textTransform: "uppercase", color: "var(--muted)", marginBottom: "8px" }}>{referrals.filter(r => r.status === "completed").length} successful referrals</div>
+                      {referrals.slice(0, 3).map(r => (
+                        <div key={r.id} style={{ display: "flex", justifyContent: "space-between", padding: "5px 0", borderBottom: "1px solid #1a1a1a", fontSize: ".75rem" }}>
+                          <span style={{ color: "var(--muted)" }}>{new Date(r.created_at).toLocaleDateString("en-IN")}</span>
+                          <span style={{ color: r.status === "completed" ? "#22c55e" : "var(--muted)", fontFamily: "var(--fc)", fontWeight: 700, fontSize: ".65rem", letterSpacing: "1px", textTransform: "uppercase" }}>{r.status}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Apply referral code */}
+                <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: "10px", padding: "20px" }}>
+                  <div style={{ fontFamily: "var(--fc)", fontSize: ".75rem", fontWeight: 700, letterSpacing: "1px", textTransform: "uppercase", color: "var(--text)", marginBottom: "8px" }}>Apply a Referral Code</div>
+                  <div style={{ fontSize: ".78rem", color: "var(--muted)", marginBottom: "14px" }}>Got a code from a friend? Enter it to activate your account with bonus benefits.</div>
+                  <div style={{ display: "flex", gap: "8px" }}>
+                    <input className="sinput" style={{ flex: 1, padding: "10px 13px", fontSize: ".85rem", fontFamily: "var(--fd)", letterSpacing: "2px", textTransform: "uppercase" }}
+                      placeholder="ENTER CODE" value={applyCode} onChange={e => setApplyCode(e.target.value.toUpperCase())} />
+                    <button style={{ padding: "10px 16px", fontFamily: "var(--fc)", fontSize: ".72rem", fontWeight: 700, letterSpacing: "1px", textTransform: "uppercase", background: "var(--accent)", color: "#000", border: "none", borderRadius: "6px", cursor: "pointer" }}
+                      onClick={async () => {
+                        if (!applyCode.trim()) return;
+                        const res = await applyReferral(applyCode.trim());
+                        if (res?.success) setApplyMsg("✅ Code applied! Your referrer got 1 free Pro month.");
+                        else setApplyMsg("❌ " + (res?.error || "Invalid code"));
+                        setApplyCode("");
+                      }}>Apply</button>
+                  </div>
+                  {applyMsg && <div style={{ marginTop: "10px", fontSize: ".78rem", color: applyMsg.startsWith("✅") ? "#22c55e" : "var(--accent2)" }}>{applyMsg}</div>}
+                </div>
+              </div>
+            </div>
           </div>
         )}
 
